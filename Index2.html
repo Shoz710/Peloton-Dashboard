@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Peloton Death Spiral Dashboard – FY2025 10-K</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --accent: #e85d04;
+    --accent2: #f48c06;
+    --green: #2ea043;
+    --red: #f85149;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --white: #f0f6fc;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; }
+
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 18px 24px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .logo { font-size: 22px; font-weight: 700; color: var(--white); letter-spacing: -0.5px; }
+  .logo span { color: var(--accent); }
+  .badge {
+    background: var(--accent);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 12px;
+    letter-spacing: 0.4px;
+  }
+  .subtitle { color: var(--muted); font-size: 12px; margin-left: auto; }
+
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+    padding: 20px 24px 0;
+  }
+  .kpi {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+  .kpi-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 6px; }
+  .kpi-value { font-size: 22px; font-weight: 700; color: var(--white); }
+  .kpi-delta { font-size: 12px; margin-top: 4px; }
+  .neg { color: var(--red); }
+  .pos { color: var(--green); }
+
+  .tabs {
+    display: flex;
+    gap: 4px;
+    padding: 20px 24px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .tab {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 13px;
+    padding: 8px 14px;
+    transition: all 0.15s;
+  }
+  .tab:hover { color: var(--white); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+
+  .panel { display: none; padding: 24px; }
+  .panel.active { display: block; }
+
+  .chart-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  @media (max-width: 720px) { .chart-grid { grid-template-columns: 1fr; } }
+
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+  }
+  .chart-card h3 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--white);
+    margin-bottom: 4px;
+  }
+  .chart-card .chart-sub { font-size: 11px; color: var(--muted); margin-bottom: 14px; }
+  .chart-wrap { position: relative; height: 220px; }
+
+  /* Simulator */
+  .sim-grid {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    gap: 20px;
+    align-items: start;
+  }
+  @media (max-width: 900px) { .sim-grid { grid-template-columns: 1fr; } }
+
+  .controls {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+  }
+  .controls h3 { font-size: 14px; font-weight: 600; color: var(--white); margin-bottom: 16px; }
+  .control-group { margin-bottom: 18px; }
+  .control-group label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .control-group label span { color: var(--white); font-weight: 600; }
+  input[type=range] {
+    width: 100%;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+  .reset-btn {
+    width: 100%;
+    background: var(--accent);
+    border: none;
+    border-radius: 6px;
+    color: #fff;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 10px;
+    margin-top: 4px;
+    transition: opacity 0.15s;
+  }
+  .reset-btn:hover { opacity: 0.85; }
+
+  .scenario-tag {
+    display: inline-block;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 8px;
+    margin-top: 12px;
+    letter-spacing: 0.4px;
+  }
+  .tag-danger { background: rgba(248,81,73,0.2); color: var(--red); border: 1px solid var(--red); }
+  .tag-warn   { background: rgba(244,140,6,0.2); color: var(--accent2); border: 1px solid var(--accent2); }
+  .tag-ok     { background: rgba(46,160,67,0.2); color: var(--green); border: 1px solid var(--green); }
+
+  /* Risk panel */
+  .risk-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
+  }
+  .risk-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+  }
+  .risk-card h4 { font-size: 13px; font-weight: 600; color: var(--white); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+  .risk-icon { font-size: 16px; }
+  .risk-card p { font-size: 12px; color: var(--muted); line-height: 1.6; }
+  .risk-card .metric { font-size: 18px; font-weight: 700; margin: 8px 0 4px; }
+
+  .spiral-explainer {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  .spiral-explainer h3 { font-size: 14px; font-weight: 600; color: var(--white); margin-bottom: 10px; }
+  .spiral-steps { display: flex; flex-wrap: wrap; gap: 8px; }
+  .step {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 12px;
+    color: var(--muted);
+    flex: 1;
+    min-width: 140px;
+    position: relative;
+  }
+  .step strong { display: block; color: var(--white); margin-bottom: 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .step-num {
+    position: absolute;
+    top: -8px; left: 10px;
+    background: var(--accent);
+    color: #fff;
+    border-radius: 50%;
+    width: 18px; height: 18px;
+    font-size: 10px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  footer {
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 11px;
+    padding: 14px 24px;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">PTON <span>Death Spiral</span></div>
+  <span class="badge">FY2025 10-K</span>
+  <div class="subtitle">Fiscal Year Ended June 30, 2025 &nbsp;|&nbsp; Prepared for CFO Review</div>
+</header>
+
+<!-- KPI Row -->
+<div class="kpi-row">
+  <div class="kpi">
+    <div class="kpi-label">Paid CF Subs (FY25 End)</div>
+    <div class="kpi-value">2.80M</div>
+    <div class="kpi-delta neg">▼ 6% YoY (FY24: 2.98M)</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Avg Monthly Churn</div>
+    <div class="kpi-value">1.6%</div>
+    <div class="kpi-delta neg">▲ +20 bps vs FY24 (1.4%)</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Subscription Revenue</div>
+    <div class="kpi-value">$1.67B</div>
+    <div class="kpi-delta neg">▼ 2.1% YoY ($1.71B)</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Total Revenue</div>
+    <div class="kpi-value">$2.49B</div>
+    <div class="kpi-delta neg">▼ 7.8% YoY ($2.70B)</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Net Loss</div>
+    <div class="kpi-value">$(119M)</div>
+    <div class="kpi-delta pos">▲ Improved vs $(552M)</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Total Debt</div>
+    <div class="kpi-value">$1.50B</div>
+    <div class="kpi-delta neg">Net Debt: $459M</div>
+  </div>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+  <button class="tab active" onclick="showTab('overview')">📊 Overview</button>
+  <button class="tab" onclick="showTab('churn')">🔄 Churn Analysis</button>
+  <button class="tab" onclick="showTab('simulator')">⚙️ Spiral Simulator</button>
+  <button class="tab" onclick="showTab('risk')">⚠️ CFO Risk Brief</button>
+</div>
+
+<!-- OVERVIEW TAB -->
+<div id="tab-overview" class="panel active">
+  <div class="chart-grid">
+    <div class="chart-card">
+      <h3>Paid Connected Fitness Subscriptions</h3>
+      <div class="chart-sub">Annual ending subscribers (millions) — FY2023–FY2025 + Q4 trend</div>
+      <div class="chart-wrap"><canvas id="subChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Revenue Breakdown</h3>
+      <div class="chart-sub">Connected Fitness Products vs. Subscription Revenue ($M)</div>
+      <div class="chart-wrap"><canvas id="revChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Gross Margin Trend</h3>
+      <div class="chart-sub">Subscription vs. Connected Fitness Products gross margin (%)</div>
+      <div class="chart-wrap"><canvas id="marginChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Net Loss & Adjusted EBITDA</h3>
+      <div class="chart-sub">GAAP net loss vs. Adj. EBITDA ($M) — improving but still negative</div>
+      <div class="chart-wrap"><canvas id="profitChart"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<!-- CHURN TAB -->
+<div id="tab-churn" class="panel">
+  <div class="chart-grid">
+    <div class="chart-card">
+      <h3>Average Net Monthly Churn Rate</h3>
+      <div class="chart-sub">Connected Fitness Subscription churn — annual average (%)</div>
+      <div class="chart-wrap"><canvas id="churnAnnualChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Quarterly Churn vs. Subscriber Count</h3>
+      <div class="chart-sub">Q4 FY24 → Q4 FY25 — churn rate (%) and ending subs (M)</div>
+      <div class="chart-wrap"><canvas id="churnQtrChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Subscriber Waterfall (FY25)</h3>
+      <div class="chart-sub">Net change in paid CF subs by quarter (thousands)</div>
+      <div class="chart-wrap"><canvas id="waterfallChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>App Subscription Decay</h3>
+      <div class="chart-sub">Paid App Subscriptions (thousands) — FY23–FY25</div>
+      <div class="chart-wrap"><canvas id="appSubChart"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<!-- SIMULATOR TAB -->
+<div id="tab-simulator" class="panel">
+  <div class="spiral-explainer">
+    <h3>🌀 The Peloton Death Spiral — How It Works</h3>
+    <div class="spiral-steps">
+      <div class="step"><span class="step-num">1</span><strong>Churn Rises</strong>Fewer new hardware sales = fewer new subscribers. Existing members cancel.</div>
+      <div class="step"><span class="step-num">2</span><strong>Sub Revenue Falls</strong>Subscription revenue ($44/mo per sub) declines with the base.</div>
+      <div class="step"><span class="step-num">3</span><strong>Fixed Costs Persist</strong>Content, studios, instructors, and $1.5B debt are largely fixed.</div>
+      <div class="step"><span class="step-num">4</span><strong>Less Investment</strong>Lower revenue → less R&D, fewer new features, weaker content.</div>
+      <div class="step"><span class="step-num">5</span><strong>More Churn</strong>Weaker product → more cancellations → back to Step 1.</div>
+    </div>
+  </div>
+
+  <div class="sim-grid">
+    <div class="controls">
+      <h3>⚙️ Scenario Controls</h3>
+      <div class="control-group">
+        <label>Monthly Churn Rate <span id="churnVal">1.6%</span></label>
+        <input type="range" id="churnSlider" min="0.5" max="5.0" step="0.1" value="1.6" oninput="updateSim()">
+      </div>
+      <div class="control-group">
+        <label>Monthly New Subscriber Growth <span id="growthVal">0.3%</span></label>
+        <input type="range" id="growthSlider" min="0.0" max="3.0" step="0.1" value="0.3" oninput="updateSim()">
+      </div>
+      <div class="control-group">
+        <label>Subscription Price ($/mo) <span id="priceVal">$44</span></label>
+        <input type="range" id="priceSlider" min="30" max="60" step="1" value="44" oninput="updateSim()">
+      </div>
+      <div class="control-group">
+        <label>Projection Horizon (months) <span id="horizonVal">36</span></label>
+        <input type="range" id="horizonSlider" min="12" max="60" step="6" value="36" oninput="updateSim()">
+      </div>
+      <button class="reset-btn" onclick="resetSim()">↺ Reset to FY25 Actuals</button>
+      <div id="scenarioTag"></div>
+    </div>
+    <div class="chart-card" style="height:fit-content">
+      <h3>Projected Subscriber Base</h3>
+      <div class="chart-sub">Starting from 2.80M (FY25 end) — based on your scenario inputs</div>
+      <div class="chart-wrap" style="height:280px"><canvas id="simChart"></canvas></div>
+      <div style="margin-top:14px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+        <div class="kpi" style="padding:10px">
+          <div class="kpi-label">End Subs</div>
+          <div class="kpi-value" id="simEndSubs" style="font-size:16px">—</div>
+        </div>
+        <div class="kpi" style="padding:10px">
+          <div class="kpi-label">Annual Sub Rev</div>
+          <div class="kpi-value" id="simRevenue" style="font-size:16px">—</div>
+        </div>
+        <div class="kpi" style="padding:10px">
+          <div class="kpi-label">Sub Change</div>
+          <div class="kpi-value" id="simChange" style="font-size:16px">—</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- RISK TAB -->
+<div id="tab-risk" class="panel">
+  <div class="risk-grid">
+    <div class="risk-card">
+      <h4><span class="risk-icon">📉</span> Subscriber Erosion</h4>
+      <div class="metric neg">−176K subs YoY</div>
+      <p>Paid CF Subscriptions fell from 2.976M (FY24) to 2.800M (FY25), a 6% decline. Q1 FY26 guidance projects a further decline to 2.72–2.73M. Each lost subscriber costs ~$528/yr in subscription revenue at $44/mo.</p>
+    </div>
+    <div class="risk-card">
+      <h4><span class="risk-icon">🔄</span> Churn Acceleration</h4>
+      <div class="metric neg">1.6% avg monthly churn</div>
+      <p>Annual churn rose from 1.3% (FY23) → 1.4% (FY24) → 1.6% (FY25). At 1.6% monthly, Peloton loses ~19% of its subscriber base annually before new additions. Q4 FY25 churn spiked to 1.8% seasonally.</p>
+    </div>
+    <div class="risk-card">
+      <h4><span class="risk-icon">🏋️</span> Hardware Dependency</h4>
+      <div class="metric neg">−17.6% hardware revenue</div>
+      <p>Connected Fitness Products revenue fell from $991.7M (FY24) to $817.1M (FY25). New hardware sales are the primary driver of new subscriber additions. Without hardware growth, subscriber replenishment stalls.</p>
+    </div>
+    <div class="risk-card">
+      <h4><span class="risk-icon">💰</span> Debt Burden</h4>
+      <div class="metric neg">$1.50B total debt</div>
+      <p>$990M Term Loan (10.9% effective rate) + $199M 2026 Convertible Notes (maturing Feb 2026) + $350M 2029 Notes. Annual interest expense: $134.5M. Net debt of $459M constrains strategic flexibility.</p>
+    </div>
+    <div class="risk-card">
+      <h4><span class="risk-icon">📊</span> Revenue Covenant Risk</h4>
+      <div class="metric neg">$1.2B sub rev covenant</div>
+      <p>The revolving credit facility requires subscription revenue ≥$1.2B (trailing 4 quarters) if drawn. FY25 subscription revenue was $1.67B — providing headroom, but continued subscriber decline narrows the buffer.</p>
+    </div>
+    <div class="risk-card">
+      <h4><span class="risk-icon">✅</span> Positive Signals</h4>
+      <div class="metric pos">$403.6M Adj. EBITDA</div>
+      <p>FY25 Adj. EBITDA surged from $3.5M to $403.6M. Free Cash Flow turned positive at $323.7M. Subscription gross margin improved to 69.1%. Net debt reduced 43% YoY. Q4 FY25 was the first quarter of positive GAAP operating income ($29.6M).</p>
+    </div>
+    <div class="risk-card">
+      <h4><span class="risk-icon">⚠️</span> 3rd Restructuring Plan</h4>
+      <div class="metric neg">3 plans in 3 years</div>
+      <p>The 2025 Restructuring Plan (announced Aug 2025) targets $100M+ in run-rate savings by end of FY26 through headcount reductions and retail exits. This is the third consecutive restructuring, signaling persistent structural cost issues.</p>
+    </div>
+    <div class="risk-card">
+      <h4><span class="risk-icon">🎯</span> FY26 Guidance</h4>
+      <div class="metric neg">Revenue guided ↓ 2%</div>
+      <p>FY26 Total Revenue guided at $2.4–$2.5B (−2% at midpoint). Paid CF Subs expected to continue declining YoY. Q1 FY26 revenue guided at $525–545M (−9% YoY). First-ever positive full-year operating income targeted.</p>
+    </div>
+  </div>
+</div>
+
+<footer>
+  Source: Peloton Interactive, Inc. Form 10-K (FY2025, filed Aug 7, 2025) &amp; 8-K Earnings Release (Aug 7, 2025) &nbsp;|&nbsp; For internal client engagement use only &nbsp;|&nbsp; Kenan-Flagler Business School
+</footer>
+
+<script>
+// ─── SHARED CHART DEFAULTS ───────────────────────────────────────────────────
+Chart.defaults.color = '#8b949e';
+Chart.defaults.borderColor = '#30363d';
+Chart.defaults.font.family = "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+Chart.defaults.font.size = 11;
+
+const ACCENT  = '#e85d04';
+const ACCENT2 = '#f48c06';
+const BLUE    = '#58a6ff';
+const GREEN   = '#2ea043';
+const RED     = '#f85149';
+const PURPLE  = '#bc8cff';
+
+function mkGrad(ctx, color) {
+  const g = ctx.createLinearGradient(0, 0, 0, 220);
+  g.addColorStop(0, color + '55');
+  g.addColorStop(1, color + '00');
+  return g;
+}
+
+// ─── TAB SWITCHER ─────────────────────────────────────────────────────────────
+function showTab(id) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  event.target.classList.add('active');
+  if (id === 'simulator') updateSim();
+}
+
+// ─── OVERVIEW CHARTS ─────────────────────────────────────────────────────────
+// Subscribers
+new Chart(document.getElementById('subChart'), {
+  type: 'line',
+  data: {
+    labels: ['FY23', 'FY24', 'FY25', 'Q1 FY26\n(Guide)'],
+    datasets: [{
+      label: 'Paid CF Subs (M)',
+      data: [2.998, 2.976, 2.800, 2.725],
+      borderColor: ACCENT,
+      backgroundColor: ctx => mkGrad(ctx.chart.ctx, ACCENT),
+      fill: true,
+      tension: 0.3,
+      pointRadius: 5,
+      pointBackgroundColor: ACCENT,
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      y: { min: 2.5, max: 3.1, ticks: { callback: v => v.toFixed(2) + 'M' } }
+    }
+  }
+});
+
+// Revenue
+new Chart(document.getElementById('revChart'), {
+  type: 'bar',
+  data: {
+    labels: ['FY23', 'FY24', 'FY25'],
+    datasets: [
+      { label: 'CF Products', data: [1130.2, 991.7, 817.1], backgroundColor: BLUE + 'cc' },
+      { label: 'Subscription', data: [1670.1, 1708.7, 1673.7], backgroundColor: ACCENT + 'cc' }
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { position: 'bottom' } },
+    scales: {
+      x: { stacked: true },
+      y: { stacked: true, ticks: { callback: v => '$' + (v/1000).toFixed(1) + 'B' } }
+    }
+  }
+});
+
+// Margins
+new Chart(document.getElementById('marginChart'), {
+  type: 'line',
+  data: {
+    labels: ['FY23', 'FY24', 'FY25'],
+    datasets: [
+      {
+        label: 'Subscription GM%',
+        data: [67.2, 67.8, 69.1],
+        borderColor: GREEN, backgroundColor: GREEN + '22',
+        fill: true, tension: 0.3, pointRadius: 5, pointBackgroundColor: GREEN
+      },
+      {
+        label: 'CF Products GM%',
+        data: [-17.6, 4.9, 13.6],
+        borderColor: ACCENT2, backgroundColor: ACCENT2 + '22',
+        fill: true, tension: 0.3, pointRadius: 5, pointBackgroundColor: ACCENT2
+      }
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { position: 'bottom' } },
+    scales: { y: { ticks: { callback: v => v + '%' } } }
+  }
+});
+
+// Profit
+new Chart(document.getElementById('profitChart'), {
+  type: 'bar',
+  data: {
+    labels: ['FY23', 'FY24', 'FY25'],
+    datasets: [
+      { label: 'Net Loss ($M)', data: [-1261.7, -551.9, -118.9], backgroundColor: RED + 'bb', type: 'bar' },
+      { label: 'Adj. EBITDA ($M)', data: [-208.5, 3.5, 403.6], borderColor: GREEN, backgroundColor: GREEN + '33', type: 'line', tension: 0.3, pointRadius: 5, pointBackgroundColor: GREEN, fill: false }
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { position: 'bottom' } },
+    scales: { y: { ticks: { callback: v => '$' + v + 'M' } } }
+  }
+});
+
+// ─── CHURN CHARTS ─────────────────────────────────────────────────────────────
+new Chart(document.getElementById('churnAnnualChart'), {
+  type: 'bar',
+  data: {
+    labels: ['FY23', 'FY24', 'FY25'],
+    datasets: [{
+      label: 'Avg Monthly Churn %',
+      data: [1.3, 1.4, 1.6],
+      backgroundColor: [ACCENT + '88', ACCENT + 'bb', ACCENT],
+      borderColor: [ACCENT, ACCENT, ACCENT],
+      borderWidth: 1
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: { y: { min: 0, max: 2.5, ticks: { callback: v => v + '%' } } }
+  }
+});
+
+// Quarterly churn + subs dual axis
+new Chart(document.getElementById('churnQtrChart'), {
+  type: 'line',
+  data: {
+    labels: ['Q4 FY24', 'Q1 FY25', 'Q2 FY25', 'Q3 FY25', 'Q4 FY25'],
+    datasets: [
+      {
+        label: 'Ending Subs (M)',
+        data: [2.976, 2.900, 2.870, 2.880, 2.800],
+        borderColor: BLUE, backgroundColor: BLUE + '22',
+        fill: true, tension: 0.3, pointRadius: 4,
+        yAxisID: 'y'
+      },
+      {
+        label: 'Monthly Churn %',
+        data: [1.9, null, 1.4, 1.2, 1.8],
+        borderColor: RED, backgroundColor: 'transparent',
+        tension: 0.3, pointRadius: 5, pointBackgroundColor: RED,
+        borderDash: [5, 3],
+        yAxisID: 'y1'
+      }
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { position: 'bottom' } },
+    scales: {
+      y:  { position: 'left',  min: 2.7, max: 3.0, ticks: { callback: v => v.toFixed(2) + 'M' } },
+      y1: { position: 'right', min: 0, max: 3, ticks: { callback: v => v + '%' }, grid: { drawOnChartArea: false } }
+    }
+  }
+});
+
+// Waterfall (quarterly net change)
+new Chart(document.getElementById('waterfallChart'), {
+  type: 'bar',
+  data: {
+    labels: ['Q1 FY25', 'Q2 FY25', 'Q3 FY25', 'Q4 FY25'],
+    datasets: [{
+      label: 'Net Sub Change (K)',
+      data: [-76, -30, +10, -80],
+      backgroundColor: v => v.raw >= 0 ? GREEN + 'cc' : RED + 'cc',
+      borderColor: v => v.raw >= 0 ? GREEN : RED,
+      borderWidth: 1
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: { y: { ticks: { callback: v => v + 'K' } } }
+  }
+});
+
+// App subs
+new Chart(document.getElementById('appSubChart'), {
+  type: 'line',
+  data: {
+    labels: ['FY23', 'FY24', 'FY25'],
+    datasets: [{
+      label: 'Paid App Subs (K)',
+      data: [831, 621, 552],
+      borderColor: PURPLE, backgroundColor: PURPLE + '22',
+      fill: true, tension: 0.3, pointRadius: 5, pointBackgroundColor: PURPLE
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: { y: { ticks: { callback: v => v + 'K' } } }
+  }
+});
+
+// ─── SIMULATOR ────────────────────────────────────────────────────────────────
+let simChartInst = null;
+
+function updateSim() {
+  const churn   = parseFloat(document.getElementById('churnSlider').value) / 100;
+  const growth  = parseFloat(document.getElementById('growthSlider').value) / 100;
+  const price   = parseFloat(document.getElementById('priceSlider').value);
+  const horizon = parseInt(document.getElementById('horizonSlider').value);
+
+  document.getElementById('churnVal').textContent   = (churn * 100).toFixed(1) + '%';
+  document.getElementById('growthVal').textContent  = (growth * 100).toFixed(1) + '%';
+  document.getElementById('priceVal').textContent   = '$' + price;
+  document.getElementById('horizonVal').textContent = horizon;
+
+  const start = 2.800; // millions
+  let subs = start;
+  const labels = ['Now'];
+  const data   = [subs];
+
+  for (let m = 1; m <= horizon; m++) {
+    const lost = subs * churn;
+    const gained = subs * growth;
+    subs = Math.max(0, subs - lost + gained);
+    if (m % 3 === 0) {
+      labels.push('M' + m);
+      data.push(parseFloat(subs.toFixed(3)));
+    }
+  }
+
+  const endSubs = subs;
+  const annualRev = endSubs * 1e6 * price * 12 / 1e9;
+  const pctChange = ((endSubs - start) / start * 100).toFixed(1);
+
+  document.getElementById('simEndSubs').textContent = endSubs.toFixed(2) + 'M';
+  document.getElementById('simRevenue').textContent = '$' + annualRev.toFixed(2) + 'B';
+  const changeEl = document.getElementById('simChange');
+  changeEl.textContent = (pctChange > 0 ? '+' : '') + pctChange + '%';
+  changeEl.className = 'kpi-value ' + (pctChange >= 0 ? 'pos' : 'neg');
+  changeEl.style.fontSize = '16px';
+
+  // Scenario tag
+  const tag = document.getElementById('scenarioTag');
+  const netMonthly = (growth - churn) * 100;
+  if (netMonthly < -1.0) {
+    tag.innerHTML = '<span class="scenario-tag tag-danger">🔴 DEATH SPIRAL — Rapid subscriber collapse</span>';
+  } else if (netMonthly < 0) {
+    tag.innerHTML = '<span class="scenario-tag tag-warn">🟡 DECLINING — Gradual subscriber erosion</span>';
+  } else {
+    tag.innerHTML = '<span class="scenario-tag tag-ok">🟢 STABILIZING — Net subscriber growth</span>';
+  }
+
+  const color = netMonthly < -1.0 ? RED : netMonthly < 0 ? ACCENT2 : GREEN;
+
+  if (simChartInst) simChartInst.destroy();
+  const ctx = document.getElementById('simChart').getContext('2d');
+  const grad = ctx.createLinearGradient(0, 0, 0, 280);
+  grad.addColorStop(0, color + '55');
+  grad.addColorStop(1, color + '00');
+
+  simChartInst = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Projected Subs (M)',
+          data,
+          borderColor: color,
+          backgroundColor: grad,
+          fill: true,
+          tension: 0.3,
+          pointRadius: 3,
+          pointBackgroundColor: color
+        },
+        {
+          label: 'FY25 Baseline (2.80M)',
+          data: Array(labels.length).fill(2.800),
+          borderColor: '#8b949e',
+          borderDash: [6, 4],
+          pointRadius: 0,
+          fill: false
+        }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom' } },
+      scales: {
+        y: { min: 0, ticks: { callback: v => v.toFixed(1) + 'M' } }
+      }
+    }
+  });
+}
+
+function resetSim() {
+  document.getElementById('churnSlider').value  = 1.6;
+  document.getElementById('growthSlider').value = 0.3;
+  document.getElementById('priceSlider').value  = 44;
+  document.getElementById('horizonSlider').value = 36;
+  updateSim();
+}
+
+// Init simulator on load
+updateSim();
+</script>
+</body>
+</html>
